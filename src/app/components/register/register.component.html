@@ -1,0 +1,11 @@
+<head><title>회원가입</title></head>
+<div class="register-form">
+  <h2>회원가입</h2>
+  <form (ngSubmit)="onRegister()" #registerForm="ngForm">
+    <input type="text" name="userid" [(ngModel)]="userId" placeholder="아이디" required />
+    <input type="text" name="username" [(ngModel)]="username" placeholder="이름" required />
+    <input type="password" name="password" [(ngModel)]="password" placeholder="비밀번호" required />
+    <input type="email" name="email" [(ngModel)]="email" placeholder="이메일" required />
+    <button type="submit" [disabled]="!registerForm.valid">회원가입</button>
+  </form>
+</div>

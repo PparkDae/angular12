@@ -1,0 +1,8 @@
+{
+  "/api": {
+    "target": "http://localhost:8080",  // Spring Boot API 서버
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}

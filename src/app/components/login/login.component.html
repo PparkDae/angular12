@@ -1,0 +1,9 @@
+<div class="login-form">
+  <h2>로그인</h2>
+  <form (ngSubmit)="onLogin()" #loginForm="ngForm">
+    <input type="text" name="userId" [(ngModel)]="userId" placeholder="아이디" required />
+    <input type="password" name="password" [(ngModel)]="password" placeholder="비밀번호" required />
+    <button type="submit" [disabled]="!loginForm.valid">로그인</button>
+    <button [routerLink]="['/register']">회원가입</button>
+  </form>
+</div>
