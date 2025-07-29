@@ -9,7 +9,7 @@ export class LogoutService {
   constructor(private router: Router) { }
 
   // 안전한 로그아웃
-  safeLogout(): void {
+  logout(): void {
     console.log('강제 로그아웃 시작...');
     localStorage.removeItem('authToken');
     sessionStorage.clear();

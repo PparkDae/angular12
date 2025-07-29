@@ -49,8 +49,6 @@ export class LoginComponent implements OnInit {
             localStorage.setItem('authToken', response.token);
           }
           
-          alert(response.message);
-          
           // returnUrl이 있으면 해당 URL로, 없으면 대시보드로 이동
           const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/dashboard';
           this.router.navigate([returnUrl], { replaceUrl: true });

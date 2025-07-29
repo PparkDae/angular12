@@ -388,11 +388,9 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // 로그아웃
   logout(): void {
-    console.log('로그아웃 시작...');
-    
     // 간단한 확인 메시지
-    if (confirm('정말 로그아웃하시겠습니까?')) {
-      this.logoutService.safeLogout();
+    if (confirm('로그아웃하시겠습니까?')) {
+      this.logoutService.logout();
     }
   }
 

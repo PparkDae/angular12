@@ -66,17 +66,10 @@ export class AuthService {
   private mockLogin(userId: string, password: string): LoginResponse {
     const user = this.mockUsers.find(u => u.userId === userId);
     
-    if (!user) {
+    if (!user || this.mockPasswords[userId] !== password) {
       return {
         success: false,
-        message: '사용자를 찾을 수 없습니다.'
-      };
-    }
-
-    if (this.mockPasswords[userId] !== password) {
-      return {
-        success: false,
-        message: '비밀번호가 일치하지 않습니다.'
+        message: '사용자 ID 또는 패스워드가 일치하지 않습니다.'
       };
     }
 
