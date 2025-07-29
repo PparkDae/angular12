@@ -1,9 +1,50 @@
 <div class="login-form">
   <h2>로그인</h2>
+  
+  <!-- 에러 메시지 표시 -->
+  <div class="error-message" *ngIf="errorMessage">
+    {{ errorMessage }}
+  </div>
+  
   <form (ngSubmit)="onLogin()" #loginForm="ngForm">
-    <input type="text" name="userId" [(ngModel)]="userId" placeholder="아이디" required />
-    <input type="password" name="password" [(ngModel)]="password" placeholder="비밀번호" required />
-    <button type="submit" [disabled]="!loginForm.valid">로그인</button>
-    <button [routerLink]="['/register']">회원가입</button>
+    <input 
+      type="text" 
+      name="userId" 
+      [(ngModel)]="userId" 
+      placeholder="아이디" 
+      required 
+      [disabled]="loading"
+    />
+    <input 
+      type="password" 
+      name="password" 
+      [(ngModel)]="password" 
+      placeholder="비밀번호" 
+      required 
+      [disabled]="loading"
+    />
+    <button 
+      type="submit" 
+      [disabled]="!loginForm.valid || loading"
+      class="login-btn"
+    >
+      <span *ngIf="!loading">로그인</span>
+      <span *ngIf="loading">로그인 중...</span>
+    </button>
+    <button type="button" [routerLink]="['/register']" [disabled]="loading">
+      회원가입
+    </button>
   </form>
+
+  <!-- 테스트 계정 정보 -->
+  <div class="test-accounts">
+    <h3>테스트 계정</h3>
+    <div class="account-list">
+      <div class="account-item" *ngFor="let account of getTestAccounts()">
+        <strong>{{ account.description }}</strong><br>
+        아이디: {{ account.userId }}<br>
+        비밀번호: {{ account.password }}
+      </div>
+    </div>
+  </div>
 </div>
