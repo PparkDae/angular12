@@ -3,7 +3,7 @@
   padding: 20px;
   max-width: 1400px;
   margin: 0 auto;
-  background-color: #f8f9fa;
+  background-color: #ffffff;
   min-height: 100vh;
   box-sizing: border-box;
 }
@@ -145,11 +145,44 @@
   display: flex;
   align-items: center;
   gap: 20px;
+  position: relative;
 }
 
 .stat-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+}
+
+/* 툴팁 스타일 */
+.stat-card[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-line;
+  z-index: 1000;
+  min-width: 200px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.stat-card[data-tooltip]:hover::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: rgba(0, 0, 0, 0.9);
+  z-index: 1000;
+  pointer-events: none;
 }
 
 .stat-icon {
@@ -177,22 +210,79 @@
 }
 
 .stat-number {
-  margin: 0 0 8px 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #333;
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin: 0;
+  color: #2c3e50;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-number::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+  transition: left 0.5s ease;
+}
+
+.stat-number.animating::before {
+  left: 100%;
+}
+
+@keyframes numberRoll {
+  0% {
+    transform: translateY(-8px) scale(0.98);
+    opacity: 0.8;
+    color: #3498db;
+  }
+  25% {
+    transform: translateY(-3px) scale(1.01);
+    opacity: 0.85;
+    color: #2980b9;
+  }
+  50% {
+    transform: translateY(1px) scale(1.02);
+    opacity: 0.9;
+    color: #2c3e50;
+  }
+  75% {
+    transform: translateY(-1px) scale(1.01);
+    opacity: 0.95;
+    color: #2c3e50;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+    color: #2c3e50;
+  }
+}
+
+.stat-number.rolling {
+  animation: numberRoll 1s ease-out;
 }
 
 .stat-change {
-  font-size: 12px;
+  font-size: 0.9rem;
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 12px;
+  display: inline-block;
+  margin-top: 5px;
 }
 
 .stat-change.positive {
-  background: rgba(76, 175, 80, 0.1);
-  color: #4caf50;
+  background: rgba(46, 204, 113, 0.1);
+  color: #27ae60;
+}
+
+.stat-change.negative {
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
 }
 
 /* 차트 섹션 */
@@ -475,3 +565,134 @@
     gap: 10px;
   }
 } 
+
+/* 높은 트래픽 경고 효과 */
+.stat-card.high-traffic {
+  animation: highTrafficWarning 1s ease-in-out infinite;
+  border: 2px solid #ff4444;
+  box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+}
+
+.stat-card.high-traffic .stat-icon {
+  background: linear-gradient(135deg, #ff4444, #ff6666);
+}
+
+.stat-card.high-traffic .stat-number {
+  color: #ff4444;
+  font-weight: bold;
+  text-shadow: 0 0 10px rgba(255, 68, 68, 0.5);
+}
+
+.stat-card.high-traffic .stat-change {
+  background: rgba(255, 68, 68, 0.2);
+  color: #ff4444;
+  animation: pulseWarning 0.8s ease-in-out infinite;
+}
+
+/* 활성 사용자 카드의 높은 트래픽 효과 (아이콘 색상 조정) */
+.stat-card.high-traffic .stat-icon i.fa-user-check {
+  color: white;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+}
+
+/* 실시간 트래픽 카드의 높은 트래픽 효과 (아이콘 색상 조정) */
+.stat-card.high-traffic .stat-icon i.fa-chart-line {
+  color: white;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+}
+
+@keyframes highTrafficWarning {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 30px rgba(255, 68, 68, 0.8);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+  }
+}
+
+@keyframes pulseWarning {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+} 
+
+/* 높은 매출 경고 효과 */
+.stat-card.high-revenue {
+  animation: highRevenueWarning 1s ease-in-out infinite;
+  border: 2px solid #0066ff;
+  box-shadow: 0 0 20px rgba(0, 102, 255, 0.6);
+}
+
+.stat-card.high-revenue .stat-icon {
+  background: linear-gradient(135deg, #0066ff, #3399ff);
+}
+
+.stat-card.high-revenue .stat-number {
+  color: #0066ff;
+  font-weight: bold;
+  text-shadow: 0 0 10px rgba(0, 102, 255, 0.5);
+}
+
+.stat-card.high-revenue .stat-change {
+  background: rgba(0, 102, 255, 0.2);
+  color: #0066ff;
+  animation: pulseRevenueWarning 0.8s ease-in-out infinite;
+}
+
+/* 총매출 카드의 높은 매출 효과 (아이콘 색상 조정) */
+.stat-card.high-revenue .stat-icon i.fa-dollar-sign {
+  color: white;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+}
+
+@keyframes highRevenueWarning {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(0, 102, 255, 0.6);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 30px rgba(0, 102, 255, 0.8);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(0, 102, 255, 0.6);
+  }
+}
+
+@keyframes pulseRevenueWarning {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+} 
+
+
+
+
+
+
+

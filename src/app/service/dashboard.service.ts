@@ -59,7 +59,8 @@ export class DashboardService {
       totalUsers: totalUsers,
       activeUsers: activeUsers,
       totalRevenue: totalUsers * 36500, // 가상의 매출 계산
-      growthRate: 12.5
+      growthRate: 12.5,
+      realtimeTraffic: 0 // 초기값은 0으로 설정, 실시간으로 업데이트됨
     }).pipe(delay(200));
   }
 

@@ -20,47 +20,58 @@
 
   <!-- 통계 카드 -->
   <div class="stats-grid">
-    <div class="stat-card" (click)="onStatCardClick('totalUsers')">
+    <div class="stat-card" 
+         [class.high-traffic]="stats.realtimeTraffic >= 50"
+         [title]="getStatTooltip('realtimeTraffic')"
+         [attr.data-tooltip]="getStatTooltip('realtimeTraffic')">
       <div class="stat-icon">
-        <i class="fas fa-users"></i>
+        <i class="fas fa-chart-line"></i>
       </div>
       <div class="stat-content">
-        <h3>총 사용자</h3>
-        <p class="stat-number">{{ stats.totalUsers.toLocaleString() }}</p>
-        <span class="stat-change positive">+{{ stats.growthRate }}%</span>
+        <h3>실시간 트래픽</h3>
+        <p class="stat-number" [@numberAnimation]="stats.realtimeTraffic">{{ stats.realtimeTraffic.toLocaleString() }}</p>
+        <span class="stat-change positive">실시간</span>
       </div>
     </div>
 
-    <div class="stat-card" (click)="onStatCardClick('activeUsers')">
+    <div class="stat-card" 
+         [class.high-traffic]="stats.activeUsers >= 50"
+         [title]="getStatTooltip('activeUsers')"
+         [attr.data-tooltip]="getStatTooltip('activeUsers')">
       <div class="stat-icon">
         <i class="fas fa-user-check"></i>
       </div>
       <div class="stat-content">
         <h3>활성 사용자</h3>
-        <p class="stat-number">{{ stats.activeUsers.toLocaleString() }}</p>
+        <p class="stat-number" [@numberAnimation]="stats.activeUsers">{{ stats.activeUsers.toLocaleString() }}</p>
         <span class="stat-change positive">+12%</span>
       </div>
     </div>
 
-    <div class="stat-card" (click)="onStatCardClick('totalRevenue')">
+    <div class="stat-card" 
+         [title]="getStatTooltip('totalUsers')"
+         [attr.data-tooltip]="getStatTooltip('totalUsers')">
+      <div class="stat-icon">
+        <i class="fas fa-users"></i>
+      </div>
+      <div class="stat-content">
+        <h3>총 사용자</h3>
+        <p class="stat-number" [@numberAnimation]="stats.totalUsers">{{ stats.totalUsers.toLocaleString() }}</p>
+        <span class="stat-change positive">{{ stats.growthRate }}%</span>
+      </div>
+    </div>
+
+    <div class="stat-card" 
+         [class.high-revenue]="stats.totalRevenue >= 10000000"
+         [title]="getStatTooltip('totalRevenue')"
+         [attr.data-tooltip]="getStatTooltip('totalRevenue')">
       <div class="stat-icon">
         <i class="fas fa-dollar-sign"></i>
       </div>
       <div class="stat-content">
         <h3>총 매출</h3>
-        <p class="stat-number">₩{{ stats.totalRevenue.toLocaleString() }}</p>
+        <p class="stat-number" [@numberAnimation]="stats.totalRevenue">₩{{ stats.totalRevenue.toLocaleString() }}</p>
         <span class="stat-change positive">+8%</span>
-      </div>
-    </div>
-
-    <div class="stat-card" (click)="onStatCardClick('growthRate')">
-      <div class="stat-icon">
-        <i class="fas fa-chart-line"></i>
-      </div>
-      <div class="stat-content">
-        <h3>성장률</h3>
-        <p class="stat-number">{{ stats.growthRate }}%</p>
-        <span class="stat-change positive">+2.5%</span>
       </div>
     </div>
   </div>

@@ -1,11 +1,12 @@
-import { Component, OnInit, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Router } from '@angular/router';
+import { Subscription, interval } from 'rxjs';
+import { Chart, registerables } from 'chart.js';
 import { AuthService } from '../../service/auth.service';
 import { DashboardService } from '../../service/dashboard.service';
 import { LogoutService } from '../../service/logout.service';
-import { DashboardStats, Activity } from '../../models/dashboard.model';
-import { Chart, ChartConfiguration, ChartType, registerables } from 'chart.js';
-import { Router } from '@angular/router';
-import { interval, Subscription } from 'rxjs';
+import { DashboardStats, Activity, ChartData } from '../../models/dashboard.model';
+import { trigger, transition, style, animate } from '@angular/animations';
 
 // Chart.js 등록
 Chart.register(...registerables);
@@ -13,7 +14,15 @@ Chart.register(...registerables);
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css']
+  styleUrls: ['./dashboard.component.css'],
+  animations: [
+    trigger('numberAnimation', [
+      transition('* => *', [
+        style({ transform: 'translateY(-10px)', opacity: 0.7 }),
+        animate('500ms ease-out', style({ transform: 'translateY(0)', opacity: 1 }))
+      ])
+    ])
+  ]
 })
 export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   
@@ -21,12 +30,22 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   private chart: Chart | null = null;
   public realtimeSubscription: Subscription | null = null;
   
+  // 애니메이션 추적을 위한 변수들
+  private totalUsersAnimation: any = null;
+  private activeUsersAnimation: any = null;
+  private realtimeTrafficAnimation: any = null;
+  private totalRevenueAnimation: any = null;
+  
+  // 활성 사용자 누적치 추적
+  private activeUsersSum = 0;
+  
   // 대시보드 데이터
   stats: DashboardStats = {
     totalUsers: 0,
     activeUsers: 0,
     totalRevenue: 0,
-    growthRate: 0
+    growthRate: 0,
+    realtimeTraffic: 0
   };
 
   recentActivities: Activity[] = [];
@@ -47,22 +66,35 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       {
         label: '실시간 트래픽',
         data: [] as number[],
-        borderColor: '#FF6B6B',
-        backgroundColor: 'rgba(255, 107, 107, 0.1)',
+        borderColor: '#FF4757',
+        backgroundColor: 'rgba(255, 71, 87, 0.1)',
         tension: 0.4,
         fill: true,
         pointRadius: 2,
-        pointHoverRadius: 4
+        pointHoverRadius: 4,
+        yAxisID: 'y'
       },
       {
         label: '활성 사용자',
         data: [] as number[],
-        borderColor: '#4ECDC4',
-        backgroundColor: 'rgba(78, 205, 196, 0.1)',
+        borderColor: '#2ED573',
+        backgroundColor: 'rgba(46, 213, 115, 0.1)',
         tension: 0.4,
         fill: true,
         pointRadius: 2,
-        pointHoverRadius: 4
+        pointHoverRadius: 4,
+        yAxisID: 'y'
+      },
+      {
+        label: '실시간 매출',
+        data: [] as number[],
+        borderColor: '#3742FA',
+        backgroundColor: 'rgba(55, 66, 250, 0.1)',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        yAxisID: 'y1'
       }
     ]
   };
@@ -90,11 +122,32 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     // 컴포넌트가 파괴될 때 구독 해제
     if (this.realtimeSubscription) {
       this.realtimeSubscription.unsubscribe();
+      this.realtimeSubscription = null;
     }
-    
+
+    // 진행 중인 애니메이션 정리
+    if (this.totalUsersAnimation) {
+      clearInterval(this.totalUsersAnimation);
+      this.totalUsersAnimation = null;
+    }
+    if (this.activeUsersAnimation) {
+      clearInterval(this.activeUsersAnimation);
+      this.activeUsersAnimation = null;
+    }
+    if (this.realtimeTrafficAnimation) {
+      clearInterval(this.realtimeTrafficAnimation);
+      this.realtimeTrafficAnimation = null;
+    }
+    if (this.totalRevenueAnimation) {
+      clearInterval(this.totalRevenueAnimation);
+      this.totalRevenueAnimation = null;
+    }
+
     // 차트 제거
     this.destroyChart();
   }
+
+
 
   // 시간 단위 변경
   onTimeUnitChange(): void {
@@ -128,23 +181,27 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
         return { 
           hour: '2-digit', 
           minute: '2-digit', 
-          second: '2-digit' 
+          second: '2-digit',
+          hour12: false
         };
       case 'minute':
         return { 
           hour: '2-digit', 
-          minute: '2-digit' 
+          minute: '2-digit',
+          hour12: false
         };
       case 'hour':
         return { 
           hour: '2-digit', 
-          minute: '2-digit' 
+          minute: '2-digit',
+          hour12: false
         };
       default:
         return { 
           hour: '2-digit', 
           minute: '2-digit', 
-          second: '2-digit' 
+          second: '2-digit',
+          hour12: false
         };
     }
   }
@@ -155,27 +212,65 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     const labels: string[] = [];
     const trafficData: number[] = [];
     const activeData: number[] = [];
+    const revenueData: number[] = []; // 실시간 매출 데이터
     const interval = this.getSelectedInterval();
     const timeFormat = this.getTimeFormat();
 
-    // 최근 10개 데이터 포인트 생성
-    for (let i = 9; i >= 0; i--) {
+    // 시간 단위에 따라 데이터 포인트 수 조정 (항상 60개 표시)
+    let dataPoints = 60;
+    if (this.selectedTimeUnit === 'minute') {
+      dataPoints = 60; // 60분
+    } else if (this.selectedTimeUnit === 'hour') {
+      dataPoints = 60; // 60시간
+    }
+
+    // 데이터 포인트 생성
+    for (let i = dataPoints - 1; i >= 0; i--) {
       const time = new Date(now.getTime() - i * interval);
       labels.push(time.toLocaleTimeString('ko-KR', timeFormat));
       
       // 랜덤 트래픽 데이터 생성 (현실적인 패턴)
-      const baseTraffic = 30 + Math.random() * 30;
+      const baseTraffic = 40 + Math.random() * 40;
       const noise = (Math.random() - 0.5) * 10;
       trafficData.push(Math.max(0, Math.round(baseTraffic + noise)));
       
       // 활성 사용자 데이터 (트래픽의 60-80%)
       const activeRatio = 0.6 + Math.random() * 0.2;
       activeData.push(Math.round(trafficData[trafficData.length - 1] * activeRatio));
+
+      // 실시간 매출 데이터 (트래픽의 50-70%)
+      const baseRevenue = 10000 + Math.random() * 20000; // 1만원 ~ 3만원
+      const revenueNoise = (Math.random() - 0.5) * 5000;
+      revenueData.push(Math.max(0, Math.round(baseRevenue + revenueNoise)));
     }
 
     this.realtimeData.labels = labels;
     this.realtimeData.datasets[0].data = trafficData;
     this.realtimeData.datasets[1].data = activeData;
+    this.realtimeData.datasets[2].data = revenueData; // 실시간 매출 데이터 추가
+
+    // 초기 통계 값 설정
+    if (this.stats.realtimeTraffic === 0) {
+      // 실시간 트래픽: 가장 최근 값
+      this.stats.realtimeTraffic = trafficData[trafficData.length - 1];
+      
+      // 활성 사용자: 가장 최근 값
+      this.stats.activeUsers = activeData[activeData.length - 1];
+      
+      // 활성 사용자 누적치 초기화
+      this.activeUsersSum = activeData.reduce((sum, value) => sum + value, 0);
+      
+      // 총 사용자: 활성 사용자 누적치
+      this.stats.totalUsers = this.activeUsersSum;
+      
+      // 총매출 초기화 (실시간 매출 데이터 기반)
+      this.stats.totalRevenue = revenueData.reduce((sum, value) => sum + value, 0);
+      
+      // 성장률 계산
+      if (this.stats.totalUsers > 0) {
+        this.stats.growthRate = Math.round((this.stats.activeUsers / this.stats.totalUsers) * 100);
+      }
+    }
   }
 
   // 실시간 업데이트 시작
@@ -184,7 +279,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       this.realtimeSubscription.unsubscribe();
     }
     
-    const updateInterval = this.getSelectedInterval();
+    const updateInterval = Math.max(this.getSelectedInterval(), 2000); // 최소 2초 간격
     this.realtimeSubscription = interval(updateInterval).subscribe(() => {
       this.updateRealtimeData();
     });
@@ -201,11 +296,11 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     const timeFormat = this.getTimeFormat();
     const timeLabel = now.toLocaleTimeString('ko-KR', timeFormat);
 
-    // 새로운 데이터 포인트 생성
-    const baseTraffic = 30 + Math.random() * 30;
+    // 새로운 데이터 포인트 생성 (50을 넘는 활성 사용자 데이터 포함)
+    const baseTraffic = 40 + Math.random() * 40; // 40-80 범위로 증가
     const noise = (Math.random() - 0.5) * 10;
     const newTraffic = Math.max(0, Math.round(baseTraffic + noise));
-    const activeRatio = 0.6 + Math.random() * 0.2;
+    const activeRatio = 0.7 + Math.random() * 0.3; // 70-100% 범위로 증가
     const newActive = Math.round(newTraffic * activeRatio);
 
     // 데이터 배열 업데이트 (가장 오래된 데이터 제거, 새로운 데이터 추가)
@@ -218,16 +313,156 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     this.realtimeData.datasets[1].data.shift();
     this.realtimeData.datasets[1].data.push(newActive);
 
+    // 실시간 매출 데이터 업데이트
+    const baseRevenue = 10000 + Math.random() * 20000; // 1만원 ~ 3만원
+    const revenueNoise = (Math.random() - 0.5) * 5000;
+    const newRevenue = Math.max(0, Math.round(baseRevenue + revenueNoise));
+    this.realtimeData.datasets[2].data.shift();
+    this.realtimeData.datasets[2].data.push(newRevenue);
+
+    // 실시간 트래픽 값 업데이트 (현재 트래픽 값)
+    this.animateNumber('realtimeTraffic', this.stats.realtimeTraffic, newTraffic);
+
+    // 활성 사용자 값 업데이트 (현재 활성 사용자 값)
+    this.animateNumber('activeUsers', this.stats.activeUsers, newActive);
+
+    // 활성 사용자 누적치 업데이트
+    this.activeUsersSum += newActive;
+    
+    // 총 사용자 값 업데이트 (활성 사용자 누적치)
+    this.animateNumber('totalUsers', this.stats.totalUsers, this.activeUsersSum);
+
+    // 총매출 계산 (실시간 트래픽 기반)
+    const revenuePerTraffic = 50000; // 트래픽당 5만원
+    const newRevenueTotal = newTraffic * revenuePerTraffic;
+    this.stats.totalRevenue += newRevenueTotal;
+    
+    // 총매출 애니메이션 (누적 방식)
+    this.animateNumber('totalRevenue', this.stats.totalRevenue - newRevenueTotal, this.stats.totalRevenue);
+
+    // 활성 사용자 비율 업데이트
+    if (this.stats.totalUsers > 0) {
+      this.stats.growthRate = Math.round((this.stats.activeUsers / this.stats.totalUsers) * 100);
+    }
+
     try {
       // 차트 업데이트
       this.chart.data.labels = this.realtimeData.labels;
       this.chart.data.datasets[0].data = this.realtimeData.datasets[0].data;
       this.chart.data.datasets[1].data = this.realtimeData.datasets[1].data;
+      this.chart.data.datasets[2].data = this.realtimeData.datasets[2].data; // 실시간 매출 데이터 업데이트
       
       this.chart.update('none'); // 애니메이션 없이 업데이트
     } catch (error) {
       console.error('차트 업데이트 중 오류:', error);
     }
+  }
+
+
+
+  // 숫자 애니메이션 (룰렛 효과)
+  animateNumber(statType: 'totalUsers' | 'activeUsers' | 'realtimeTraffic' | 'totalRevenue', startValue: number, endValue: number): void {
+    // 이미 진행 중인 애니메이션이 있으면 중단
+    if (statType === 'totalUsers' && this.totalUsersAnimation) {
+      clearInterval(this.totalUsersAnimation);
+      this.totalUsersAnimation = null;
+    }
+    if (statType === 'activeUsers' && this.activeUsersAnimation) {
+      clearInterval(this.activeUsersAnimation);
+      this.activeUsersAnimation = null;
+    }
+    if (statType === 'realtimeTraffic' && this.realtimeTrafficAnimation) {
+      clearInterval(this.realtimeTrafficAnimation);
+      this.realtimeTrafficAnimation = null;
+    }
+    if (statType === 'totalRevenue' && this.totalRevenueAnimation) {
+      clearInterval(this.totalRevenueAnimation);
+      this.totalRevenueAnimation = null;
+    }
+
+    // 증가량이 너무 작으면 애니메이션 생략
+    const difference = endValue - startValue;
+    if (Math.abs(difference) < 1) {
+      return;
+    }
+
+    const duration = 1500; // 1.5초로 조정
+    const steps = 20; // 단계 수 조정
+    const stepDuration = duration / steps;
+    const increment = difference / steps;
+    
+    let currentStep = 0;
+    let currentValue = startValue;
+
+    // 애니메이션 시작 시 CSS 클래스 추가
+    let element: HTMLElement | null = null;
+    
+    switch (statType) {
+      case 'realtimeTraffic':
+        element = document.querySelector('.stat-card:nth-child(1) .stat-number') as HTMLElement;
+        break;
+      case 'activeUsers':
+        element = document.querySelector('.stat-card:nth-child(2) .stat-number') as HTMLElement;
+        break;
+      case 'totalUsers':
+        element = document.querySelector('.stat-card:nth-child(3) .stat-number') as HTMLElement;
+        break;
+      case 'totalRevenue':
+        element = document.querySelector('.stat-card:nth-child(4) .stat-number') as HTMLElement;
+        break;
+    }
+    
+    if (element) {
+      element.classList.add('rolling');
+      setTimeout(() => {
+        if (element) {
+          element.classList.remove('rolling');
+        }
+      }, 800);
+    }
+
+    const animation = setInterval(() => {
+      currentStep++;
+      currentValue += increment;
+
+      // 마지막 단계에서는 정확한 목표 값으로 설정
+      if (currentStep >= steps) {
+        currentValue = endValue;
+        clearInterval(animation);
+        
+        // 애니메이션 완료 시 추적 변수 초기화
+        if (statType === 'totalUsers') {
+          this.totalUsersAnimation = null;
+        } else if (statType === 'activeUsers') {
+          this.activeUsersAnimation = null;
+        } else if (statType === 'realtimeTraffic') {
+          this.realtimeTrafficAnimation = null;
+        } else if (statType === 'totalRevenue') {
+          this.totalRevenueAnimation = null;
+        }
+      }
+
+      // 통계 값 업데이트
+      if (statType === 'totalUsers') {
+        this.stats.totalUsers = Math.round(currentValue);
+        this.totalUsersAnimation = animation;
+      } else if (statType === 'activeUsers') {
+        this.stats.activeUsers = Math.round(currentValue);
+        this.activeUsersAnimation = animation;
+      } else if (statType === 'realtimeTraffic') {
+        this.stats.realtimeTraffic = Math.round(currentValue);
+        this.realtimeTrafficAnimation = animation;
+      } else if (statType === 'totalRevenue') {
+        this.stats.totalRevenue = Math.round(currentValue);
+        this.totalRevenueAnimation = animation;
+      }
+
+      // 성장률도 함께 업데이트 (활성 사용자 비율)
+      if (this.stats.totalUsers > 0) {
+        this.stats.growthRate = Math.round((this.stats.activeUsers / this.stats.totalUsers) * 100);
+      }
+
+    }, stepDuration);
   }
 
   // 대시보드 데이터 로드
@@ -290,87 +525,142 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
     console.log('실시간 데이터:', this.realtimeData);
 
-    const chartConfig: ChartConfiguration = {
-      type: 'line' as ChartType,
-      data: {
-        labels: this.realtimeData.labels,
-        datasets: this.realtimeData.datasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          duration: 300
-        },
-        interaction: {
-          mode: 'index' as const,
-          intersect: false,
-        },
-        plugins: {
-          title: {
-            display: true,
-            text: '실시간 트래픽 모니터링',
-            font: {
-              size: 16,
-              weight: 'bold'
+    try {
+      this.chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: this.realtimeData.labels,
+          datasets: [
+            {
+              label: '실시간 트래픽',
+              data: this.realtimeData.datasets[0].data,
+              borderColor: '#FF4757',
+              backgroundColor: 'rgba(255, 71, 87, 0.1)',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 2,
+              pointHoverRadius: 4,
+              yAxisID: 'y'
+            },
+            {
+              label: '활성 사용자',
+              data: this.realtimeData.datasets[1].data,
+              borderColor: '#2ED573',
+              backgroundColor: 'rgba(46, 213, 115, 0.1)',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 2,
+              pointHoverRadius: 4,
+              yAxisID: 'y'
+            },
+            {
+              label: '실시간 매출',
+              data: this.realtimeData.datasets[2].data,
+              borderColor: '#3742FA',
+              backgroundColor: 'rgba(55, 66, 250, 0.1)',
+              tension: 0.4,
+              fill: true,
+              pointRadius: 2,
+              pointHoverRadius: 4,
+              yAxisID: 'y1'
             }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: {
+            duration: 300
           },
-          legend: {
-            position: 'top' as const,
-            labels: {
-              usePointStyle: true,
-              padding: 15
-            }
-          },
-          tooltip: {
-            mode: 'index',
+          interaction: {
+            mode: 'index' as const,
             intersect: false,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            titleColor: '#fff',
-            bodyColor: '#fff',
-            borderColor: '#fff',
-            borderWidth: 1
-          }
-        },
-        scales: {
-          x: {
-            type: 'category',
-            display: true,
+          },
+          plugins: {
             title: {
               display: true,
-              text: '시간'
+              text: '실시간 트래픽 & 매출 모니터링',
+              font: {
+                size: 16,
+                weight: 'bold'
+              }
             },
-            grid: {
-              color: 'rgba(0, 0, 0, 0.1)'
+            legend: {
+              position: 'top' as const,
+              labels: {
+                usePointStyle: true,
+                padding: 15
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: '#fff',
+              bodyColor: '#fff',
+              borderColor: '#fff',
+              borderWidth: 1
             }
           },
-          y: {
-            type: 'linear',
-            display: true,
-            title: {
+          scales: {
+            x: {
+              type: 'category',
               display: true,
-              text: '트래픽 수'
+              title: {
+                display: true,
+                text: '시간'
+              },
+              grid: {
+                color: 'rgba(0, 0, 0, 0.1)'
+              },
+              ticks: {
+                maxTicksLimit: 12, // 최대 12개의 틱만 표시
+                maxRotation: 45, // 라벨 회전
+                minRotation: 0,
+                autoSkip: true,
+                autoSkipPadding: 10
+              }
             },
-            beginAtZero: true,
-            grid: {
-              color: 'rgba(0, 0, 0, 0.1)'
+            y: {
+              type: 'linear',
+              display: true,
+              title: {
+                display: true,
+                text: '트래픽 수'
+              },
+              beginAtZero: true,
+              grid: {
+                color: 'rgba(0, 0, 0, 0.1)'
+              }
+            },
+            y1: { // 새로운 축 추가
+              type: 'linear',
+              display: true,
+              position: 'right',
+              title: {
+                display: true,
+                text: '매출 (원)'
+              },
+              beginAtZero: true,
+              grid: {
+                color: 'rgba(0, 0, 0, 0.1)'
+              },
+              ticks: {
+                color: '#3742FA' // 매출 데이터와 동일한 색상
+              }
             }
-          }
-        },
-        elements: {
-          point: {
-            hoverRadius: 6,
-            radius: 2
           },
-          line: {
-            borderWidth: 2
+          elements: {
+            point: {
+              hoverRadius: 6,
+              radius: 2
+            },
+            line: {
+              borderWidth: 2
+            }
           }
         }
-      }
-    };
-
-    try {
-      this.chart = new Chart(ctx, chartConfig);
+      });
       console.log('차트 생성 완료');
       
       // 차트 생성 후 실시간 업데이트 시작
@@ -484,39 +774,29 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     // this.router.navigate(['/analytics']);
   }
 
-  // 통계 카드 클릭 시 상세 정보 표시
-  onStatCardClick(statType: string): void {
-    console.log(`${statType} 카드가 클릭되었습니다.`);
-    
-    let message = '';
-    let title = '';
-    
+
+
+  // 통계 카드 툴팁 정보 가져오기
+  getStatTooltip(statType: string): string {
     switch (statType) {
+      case 'realtimeTraffic':
+        const warningMessage = this.stats.realtimeTraffic >= 50 ? '\n⚠️ 높은 트래픽 경고!' : '';
+        return `현재 실시간 트래픽: ${this.stats.realtimeTraffic.toLocaleString()}\n차트의 최신 트래픽 값${warningMessage}`;
       case 'totalUsers':
-        title = '총 사용자 통계';
-        message = `총 사용자: ${this.stats.totalUsers.toLocaleString()}명\n성장률: +${this.stats.growthRate}%`;
-        break;
+        return `총 사용자: ${this.stats.totalUsers.toLocaleString()}명\n활성 사용자 누적치`;
       case 'activeUsers':
-        title = '활성 사용자 통계';
-        message = `활성 사용자: ${this.stats.activeUsers.toLocaleString()}명\n활성률: ${((this.stats.activeUsers / this.stats.totalUsers) * 100).toFixed(1)}%`;
-        break;
+        const activeRate = ((this.stats.activeUsers / this.stats.totalUsers) * 100).toFixed(1);
+        const activeWarningMessage = this.stats.activeUsers >= 50 ? '\n⚠️ 높은 활성 사용자 경고!' : '';
+        return `활성 사용자: ${this.stats.activeUsers.toLocaleString()}명\n현재 활성 사용자 비율: ${activeRate}%${activeWarningMessage}`;
       case 'totalRevenue':
-        title = '총 매출 통계';
-        message = `총 매출: ₩${this.stats.totalRevenue.toLocaleString()}\n월 평균: ₩${(this.stats.totalRevenue / 12).toLocaleString()}`;
-        break;
+        const monthlyAvg = (this.stats.totalRevenue / 12).toLocaleString();
+        const revenueWarningMessage = this.stats.totalRevenue >= 10000000 ? '\n🎉 높은 매출 달성!' : '';
+        return `총 매출: ₩${this.stats.totalRevenue.toLocaleString()}\n월 평균: ₩${monthlyAvg}${revenueWarningMessage}`;
       case 'growthRate':
-        title = '성장률 통계';
-        message = `현재 성장률: ${this.stats.growthRate}%\n목표 성장률: 15%`;
-        break;
+        return `활성 사용자 비율: ${this.stats.growthRate}%\n현재 활성 사용자 / 총 사용자`;
       default:
-        title = '통계 정보';
-        message = '선택된 통계 정보를 확인할 수 없습니다.';
+        return '통계 정보를 확인할 수 없습니다.';
     }
-    
-    alert(`${title}\n\n${message}`);
-    
-    // 실제 구현에서는 모달이나 상세 페이지로 이동
-    // this.openStatDetailModal(statType);
   }
 
   // 활동 항목 클릭 시 상세 정보 표시
@@ -536,4 +816,4 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     // 실제 구현에서는 활동 상세 모달이나 페이지로 이동
     // this.openActivityDetailModal(activity);
   }
-} 
+}

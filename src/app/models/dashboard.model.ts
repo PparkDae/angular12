@@ -4,6 +4,7 @@ export interface DashboardStats {
   activeUsers: number;
   totalRevenue: number;
   growthRate: number;
+  realtimeTraffic: number;
 }
 
 // 활동 인터페이스
