@@ -38,15 +38,13 @@ export class RegisterComponent {
 
     this.authService.register(this.userId, this.username, this.password, this.email)
       .subscribe({
-        next: (response: RegisterResponse) => {
+        next: async (response: RegisterResponse) => {
           this.loading = false;
           console.log('회원가입 응답:', response);
           
           if (response.success) {
             this.successMessage = response.message;
-            setTimeout(() => {
-              this.router.navigate(['/login']);
-            }, 2000);
+            await this.router.navigate(['/login']);
           } else {
             this.errorMessage = response.message;
           }
