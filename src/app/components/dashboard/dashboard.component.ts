@@ -470,26 +470,26 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     this.loading = true;
     
     // 통계 데이터 로드
-    this.dashboardService.getUserStats().subscribe(
-      (stats: DashboardStats) => {
+    this.dashboardService.getUserStats().subscribe({
+      next: (stats: DashboardStats) => {
         this.stats = stats;
         this.loading = false;
       },
-      (error: any) => {
+      error: (error: any) => {
         console.error('통계 데이터 로드 실패:', error);
         this.loading = false;
       }
-    );
+    });
 
     // 최근 활동 데이터 로드
-    this.dashboardService.getRecentActivities().subscribe(
-      (activities: Activity[]) => {
+    this.dashboardService.getRecentActivities().subscribe({
+      next: (activities: Activity[]) => {
         this.recentActivities = activities;
       },
-      (error: any) => {
+      error: (error: any) => {
         console.error('활동 데이터 로드 실패:', error);
       }
-    );
+    });
   }
 
   // 차트 제거 메서드
