@@ -1,49 +1,104 @@
-<div class="login-form">
-  <h2>로그인</h2>
-  
-  <!-- 에러 메시지 표시 -->
-  <div class="error-message" *ngIf="errorMessage">
-    {{ errorMessage }}
+<div class="login-container">
+  <div class="login-background">
+    <div class="background-shapes">
+      <div class="shape shape-1"></div>
+      <div class="shape shape-2"></div>
+      <div class="shape shape-3"></div>
+      <div class="shape shape-4"></div>
+    </div>
   </div>
   
-  <form (ngSubmit)="onLogin()" #loginForm="ngForm">
-    <input 
-      type="text" 
-      name="userId" 
-      [(ngModel)]="userId" 
-      placeholder="아이디" 
-      required 
-      [disabled]="loading"
-    />
-    <input 
-      type="password" 
-      name="password" 
-      [(ngModel)]="password" 
-      placeholder="비밀번호" 
-      required 
-      [disabled]="loading"
-    />
-    <button 
-      type="submit" 
-      [disabled]="!loginForm.valid || loading"
-      class="login-btn"
-    >
-      <span *ngIf="!loading">로그인</span>
-      <span *ngIf="loading">로그인 중...</span>
-    </button>
-    <button type="button" [routerLink]="['/register']" [disabled]="loading">
-      회원가입
-    </button>
-  </form>
+  <div class="login-card">
+    <div class="login-header">
+      <h1>환영합니다</h1>
+      <p>계정에 로그인하여 서비스를 이용하세요</p>
+    </div>
 
-  <!-- 테스트 계정 정보 -->
-  <div class="test-accounts">
-    <h3>테스트 계정</h3>
-    <div class="account-list">
-      <div class="account-item" *ngFor="let account of getTestAccounts()">
-        <strong>{{ account.description }}</strong><br>
-        아이디: {{ account.userId }}<br>
-        비밀번호: {{ account.password }}
+    <!-- 에러 메시지 표시 -->
+    <div class="error-message" *ngIf="errorMessage">
+      <i class="fas fa-exclamation-circle"></i>
+      <span>{{ errorMessage }}</span>
+    </div>
+
+    <form (ngSubmit)="onLogin()" #loginForm="ngForm" class="login-form">
+      <div class="input-group">
+        <div class="input-icon">
+          <i class="fas fa-user"></i>
+        </div>
+        <input 
+          type="text" 
+          name="userId" 
+          [(ngModel)]="userId" 
+          placeholder="아이디를 입력하세요" 
+          required 
+          [disabled]="loading"
+          class="form-input"
+        />
+      </div>
+      
+      <div class="input-group">
+        <div class="input-icon">
+          <i class="fas fa-lock"></i>
+        </div>
+        <input 
+          type="password" 
+          name="password" 
+          [(ngModel)]="password" 
+          placeholder="비밀번호를 입력하세요" 
+          required 
+          [disabled]="loading"
+          class="form-input"
+        />
+      </div>
+
+      <button 
+        type="submit" 
+        [disabled]="!loginForm.valid || loading"
+        class="login-btn"
+      >
+        <span *ngIf="!loading">
+          <i class="fas fa-sign-in-alt"></i>
+          로그인
+        </span>
+        <span *ngIf="loading" class="loading-spinner">
+          <i class="fas fa-spinner fa-spin"></i>
+          로그인 중...
+        </span>
+      </button>
+      
+      <div class="divider">
+        <span>또는</span>
+      </div>
+      
+      <button type="button" [routerLink]="['/register']" [disabled]="loading" class="register-btn">
+        <i class="fas fa-user-plus"></i>
+        회원가입
+      </button>
+    </form>
+
+    <!-- 테스트 계정 정보 -->
+    <div class="test-accounts">
+      <div class="test-header">
+        <i class="fas fa-info-circle"></i>
+        <span>테스트 계정</span>
+      </div>
+      <div class="account-list">
+        <div class="account-item" *ngFor="let account of getTestAccounts(); let i = index">
+          <div class="account-icon">
+            <i class="fas fa-user-circle"></i>
+          </div>
+          <div class="account-info">
+            <div class="account-title">{{ account.description }}</div>
+            <div class="account-details">
+              <span class="detail-label">아이디:</span>
+              <span class="detail-value">{{ account.userId }}</span>
+            </div>
+            <div class="account-details">
+              <span class="detail-label">비밀번호:</span>
+              <span class="detail-value">{{ account.password }}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>

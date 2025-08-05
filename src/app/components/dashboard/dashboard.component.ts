@@ -30,6 +30,9 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   private chart: Chart | null = null;
   public realtimeSubscription: Subscription | null = null;
   
+  // 다크모드 상태
+  public isDarkMode = false;
+  
   // 애니메이션 추적을 위한 변수들
   private totalUsersAnimation: any = null;
   private activeUsersAnimation: any = null;
@@ -50,6 +53,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
   recentActivities: Activity[] = [];
   loading = true;
+  error: string | null = null;
 
   // 시간 단위 선택 옵션
   timeUnitOptions = [
@@ -109,6 +113,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit(): void {
     this.loadDashboardData();
     this.initializeRealtimeData();
+    this.loadDarkModeSetting(); // 다크모드 설정 로드
   }
 
   ngAfterViewInit(): void {
@@ -145,6 +150,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
     // 차트 제거
     this.destroyChart();
+    this.saveDarkModeSetting(); // 다크모드 설정 저장
   }
 
 
@@ -525,6 +531,12 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
 
     console.log('실시간 데이터:', this.realtimeData);
 
+    // 다크모드에 따른 색상 설정
+    const isDark = this.isDarkMode;
+    const textColor = isDark ? '#ffffff' : '#2c3e50';
+    const gridColor = isDark ? '#404040' : '#e9ecef';
+    const backgroundColor = isDark ? '#404040' : '#f8f9fa';
+
     try {
       this.chart = new Chart(ctx, {
         type: 'line',
@@ -535,7 +547,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
               label: '실시간 트래픽',
               data: this.realtimeData.datasets[0].data,
               borderColor: '#FF4757',
-              backgroundColor: 'rgba(255, 71, 87, 0.1)',
+              backgroundColor: isDark ? 'rgba(255, 71, 87, 0.2)' : 'rgba(255, 71, 87, 0.1)',
               tension: 0.4,
               fill: true,
               pointRadius: 2,
@@ -546,7 +558,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
               label: '활성 사용자',
               data: this.realtimeData.datasets[1].data,
               borderColor: '#2ED573',
-              backgroundColor: 'rgba(46, 213, 115, 0.1)',
+              backgroundColor: isDark ? 'rgba(46, 213, 115, 0.2)' : 'rgba(46, 213, 115, 0.1)',
               tension: 0.4,
               fill: true,
               pointRadius: 2,
@@ -557,7 +569,7 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
               label: '실시간 매출',
               data: this.realtimeData.datasets[2].data,
               borderColor: '#3742FA',
-              backgroundColor: 'rgba(55, 66, 250, 0.1)',
+              backgroundColor: isDark ? 'rgba(55, 66, 250, 0.2)' : 'rgba(55, 66, 250, 0.1)',
               tension: 0.4,
               fill: true,
               pointRadius: 2,
@@ -583,22 +595,24 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
               font: {
                 size: 16,
                 weight: 'bold'
-              }
+              },
+              color: textColor
             },
             legend: {
               position: 'top' as const,
               labels: {
                 usePointStyle: true,
-                padding: 15
+                padding: 15,
+                color: textColor
               }
             },
             tooltip: {
               mode: 'index',
               intersect: false,
-              backgroundColor: 'rgba(0, 0, 0, 0.8)',
-              titleColor: '#fff',
-              bodyColor: '#fff',
-              borderColor: '#fff',
+              backgroundColor: isDark ? 'rgba(45, 45, 45, 0.9)' : 'rgba(0, 0, 0, 0.8)',
+              titleColor: isDark ? '#ffffff' : '#fff',
+              bodyColor: isDark ? '#ffffff' : '#fff',
+              borderColor: isDark ? '#404040' : '#fff',
               borderWidth: 1
             }
           },
@@ -608,17 +622,19 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
               display: true,
               title: {
                 display: true,
-                text: '시간'
+                text: '시간',
+                color: textColor
               },
               grid: {
-                color: 'rgba(0, 0, 0, 0.1)'
+                color: gridColor
               },
               ticks: {
                 maxTicksLimit: 12, // 최대 12개의 틱만 표시
                 maxRotation: 45, // 라벨 회전
                 minRotation: 0,
                 autoSkip: true,
-                autoSkipPadding: 10
+                autoSkipPadding: 10,
+                color: textColor
               }
             },
             y: {
@@ -626,11 +642,15 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
               display: true,
               title: {
                 display: true,
-                text: '트래픽 수'
+                text: '트래픽 수',
+                color: textColor
               },
               beginAtZero: true,
               grid: {
-                color: 'rgba(0, 0, 0, 0.1)'
+                color: gridColor
+              },
+              ticks: {
+                color: textColor
               }
             },
             y1: { // 새로운 축 추가
@@ -639,14 +659,15 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
               position: 'right',
               title: {
                 display: true,
-                text: '매출 (원)'
+                text: '매출 (원)',
+                color: textColor
               },
               beginAtZero: true,
               grid: {
-                color: 'rgba(0, 0, 0, 0.1)'
+                color: gridColor
               },
               ticks: {
-                color: '#3742FA' // 매출 데이터와 동일한 색상
+                color: textColor
               }
             }
           },
@@ -815,5 +836,85 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     
     // 실제 구현에서는 활동 상세 모달이나 페이지로 이동
     // this.openActivityDetailModal(activity);
+  }
+
+  // 다크모드 토글
+  toggleDarkMode(): void {
+    this.isDarkMode = !this.isDarkMode;
+    this.saveDarkModeSetting();
+    this.applyDarkMode();
+    
+    // 차트가 존재하면 다크모드에 맞게 업데이트
+    if (this.chart) {
+      this.updateChartForDarkMode();
+    }
+  }
+
+  // 다크모드 설정 로드
+  loadDarkModeSetting(): void {
+    const savedMode = localStorage.getItem('isDarkMode');
+    if (savedMode === 'true') {
+      this.isDarkMode = true;
+    } else {
+      this.isDarkMode = false;
+    }
+    this.applyDarkMode();
+  }
+
+  // 다크모드 설정 저장
+  saveDarkModeSetting(): void {
+    localStorage.setItem('isDarkMode', this.isDarkMode.toString());
+  }
+
+  // 다크모드 적용
+  applyDarkMode(): void {
+    if (this.isDarkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+  }
+
+  // 차트 다크모드 업데이트
+  updateChartForDarkMode(): void {
+    if (!this.chart) return;
+
+    const isDark = this.isDarkMode;
+    const textColor = isDark ? '#ffffff' : '#2c3e50';
+    const gridColor = isDark ? '#404040' : '#e9ecef';
+
+    // 차트 옵션 업데이트
+    this.chart.options.plugins!.title!.color = textColor;
+    this.chart.options.plugins!.legend!.labels!.color = textColor;
+    
+    // 툴팁 색상 업데이트
+    this.chart.options.plugins!.tooltip!.backgroundColor = isDark ? 'rgba(45, 45, 45, 0.9)' : 'rgba(0, 0, 0, 0.8)';
+    this.chart.options.plugins!.tooltip!.borderColor = isDark ? '#404040' : '#fff';
+
+    // 축 색상 업데이트
+    if (this.chart.options.scales) {
+      const scales = this.chart.options.scales as any;
+      
+      if (scales.x) {
+        scales.x.title.color = textColor;
+        scales.x.grid.color = gridColor;
+        scales.x.ticks.color = textColor;
+      }
+      
+      if (scales.y) {
+        scales.y.title.color = textColor;
+        scales.y.grid.color = gridColor;
+        scales.y.ticks.color = textColor;
+      }
+      
+      if (scales.y1) {
+        scales.y1.title.color = textColor;
+        scales.y1.grid.color = gridColor;
+        scales.y1.ticks.color = textColor;
+      }
+    }
+
+    // 차트 업데이트
+    this.chart.update('none');
   }
 }
