@@ -4,7 +4,7 @@ import {Observable, of} from "rxjs";
 import {delay} from "rxjs/operators";
 import {DashboardService} from "./dashboard.service";
 import {User} from "../models/user.model";
-import {LoginResponse, RegisterResponse, LogoutResponse} from "../models/auth.model";
+import {LoginResponse, RegisterResponse} from "../models/auth.model";
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -127,17 +127,6 @@ export class AuthService {
     };
   }
 
-  // 로그아웃 메서드
-  logout(): Observable<LogoutResponse> {
-    // localStorage에서 토큰 제거
-    localStorage.removeItem('authToken');
-    
-    return of({
-      success: true,
-      message: '로그아웃되었습니다.'
-    }).pipe(delay(200));
-  }
-
   // 현재 로그인된 사용자 정보 조회
   getCurrentUser(): User | null {
     // 실제로는 localStorage나 세션에서 토큰을 확인해야 함
@@ -153,10 +142,5 @@ export class AuthService {
   // 인증 상태 확인
   isAuthenticated(): boolean {
     return this.getCurrentUser() !== null;
-  }
-
-  // 강제 로그아웃 (토큰만 제거)
-  forceLogout(): void {
-    localStorage.removeItem('authToken');
   }
 }
