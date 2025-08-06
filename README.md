@@ -92,11 +92,11 @@ angular12/
 
 각 컴포넌트의 상세한 코드 흐름과 구조를 확인할 수 있습니다:
 
-- <a href="./docs/components/dashboard-component.md" target="_blank">**Dashboard Component**</a> - 실시간 데이터 모니터링과 시각화를 담당하는 핵심 컴포넌트
-- <a href="./docs/components/login-component.md" target="_blank">**Login Component**</a> - 사용자 인증을 담당하는 로그인 컴포넌트
-- <a href="./docs/components/register-component.md" target="_blank">**Register Component**</a> - 새로운 사용자 등록을 담당하는 회원가입 컴포넌트
-- <a href="./docs/components/main-page-component.md" target="_blank">**Main Page Component**</a> - 로그인 후 접근하는 메인 페이지 컴포넌트
-- <a href="./docs/components/app-component.md" target="_blank">**App Component**</a> - Angular 애플리케이션의 루트 컴포넌트
+- <a href="docs/components/dashboard-component.md" target="_blank" rel="noopener noreferrer">**Dashboard Component**</a> - 실시간 데이터 모니터링과 시각화를 담당하는 핵심 컴포넌트
+- <a href="docs/components/login-component.md" target="_blank" rel="noopener noreferrer">**Login Component**</a> - 사용자 인증을 담당하는 로그인 컴포넌트
+- <a href="docs/components/register-component.md" target="_blank" rel="noopener noreferrer">**Register Component**</a> - 새로운 사용자 등록을 담당하는 회원가입 컴포넌트
+- <a href="docs/components/main-page-component.md" target="_blank" rel="noopener noreferrer">**Main Page Component**</a> - 로그인 후 접근하는 메인 페이지 컴포넌트
+- <a href="docs/components/app-component.md" target="_blank" rel="noopener noreferrer">**App Component**</a> - Angular 애플리케이션의 루트 컴포넌트
 
 ## 🎮 사용법
 
