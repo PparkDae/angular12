@@ -67,17 +67,36 @@ angular12/
 │   │   ├── service/
 │   │   │   ├── auth.service.ts    # 인증 서비스
 │   │   │   ├── dashboard.service.ts # 대시보드 서비스
-│   │   │   └── logout.service.ts  # 로그아웃 서비스
+│   │   │   ├── logout.service.ts  # 로그아웃 서비스
+│   │   │   ├── animation.service.ts # 애니메이션 서비스
+│   │   │   ├── chart.service.ts   # 차트 서비스
+│   │   │   ├── data-generation.service.ts # 데이터 생성 서비스
+│   │   │   └── dark-mode.service.ts # 다크모드 서비스
 │   │   ├── models/
 │   │   │   ├── user.model.ts      # 사용자 모델
 │   │   │   ├── auth.model.ts      # 인증 모델
-│   │   │   └── dashboard.model.ts # 대시보드 모델
+│   │   │   ├── dashboard.model.ts # 대시보드 모델
+│   │   │   └── dashboard.types.ts # 대시보드 타입 정의
+│   │   ├── constants/
+│   │   │   └── dashboard.constants.ts # 대시보드 상수
 │   │   └── guards/
 │   │       ├── auth.guard.ts      # 인증 가드
 │   │       └── login.guard.ts     # 로그인 가드
 │   └── assets/
+├── docs/
+│   └── components/                # 컴포넌트 상세 문서
 └── package.json
 ```
+
+## 📚 컴포넌트 상세 설명
+
+각 컴포넌트의 상세한 코드 흐름과 구조를 확인할 수 있습니다:
+
+- <a href="./docs/components/dashboard-component.md" target="_blank">**Dashboard Component**</a> - 실시간 데이터 모니터링과 시각화를 담당하는 핵심 컴포넌트
+- <a href="./docs/components/login-component.md" target="_blank">**Login Component**</a> - 사용자 인증을 담당하는 로그인 컴포넌트
+- <a href="./docs/components/register-component.md" target="_blank">**Register Component**</a> - 새로운 사용자 등록을 담당하는 회원가입 컴포넌트
+- <a href="./docs/components/main-page-component.md" target="_blank">**Main Page Component**</a> - 로그인 후 접근하는 메인 페이지 컴포넌트
+- <a href="./docs/components/app-component.md" target="_blank">**App Component**</a> - Angular 애플리케이션의 루트 컴포넌트
 
 ## 🎮 사용법
 

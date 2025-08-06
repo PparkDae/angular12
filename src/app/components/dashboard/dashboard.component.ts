@@ -1,20 +1,22 @@
-import { Component, OnInit, AfterViewInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, ViewChild, ElementRef, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription, interval } from 'rxjs';
-import { Chart, registerables } from 'chart.js';
 import { AuthService } from '../../service/auth.service';
 import { DashboardService } from '../../service/dashboard.service';
 import { LogoutService } from '../../service/logout.service';
-import { DashboardStats, Activity, ChartData } from '../../models/dashboard.model';
+import { AnimationService } from '../../service/animation.service';
+import { ChartService } from '../../service/chart.service';
+import { DataGenerationService } from '../../service/data-generation.service';
+import { DarkModeService } from '../../service/dark-mode.service';
+import { DashboardStats, Activity, RealtimeData, StatType } from '../../models/dashboard.types';
+import { TIME_UNIT_OPTIONS, DATA_GENERATION_CONFIG } from '../../constants/dashboard.constants';
 import { trigger, transition, style, animate } from '@angular/animations';
-
-// Chart.js 등록
-Chart.register(...registerables);
 
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   animations: [
     trigger('numberAnimation', [
       transition('* => *', [
@@ -27,17 +29,23 @@ Chart.register(...registerables);
 export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   
   @ViewChild('chartCanvas', { static: false }) chartCanvas!: ElementRef<HTMLCanvasElement>;
-  private chart: Chart | null = null;
+  
+  // 서비스 주입
+  constructor(
+    private authService: AuthService, 
+    private dashboardService: DashboardService,
+    private logoutService: LogoutService,
+    private animationService: AnimationService,
+    private chartService: ChartService,
+    private dataGenerationService: DataGenerationService,
+    public darkModeService: DarkModeService,
+    private router: Router,
+    private cdr: ChangeDetectorRef
+  ) { }
+
+  // 구독 관리
   public realtimeSubscription: Subscription | null = null;
-  
-  // 다크모드 상태
-  public isDarkMode = false;
-  
-  // 애니메이션 추적을 위한 변수들
-  private totalUsersAnimation: any = null;
-  private activeUsersAnimation: any = null;
-  private realtimeTrafficAnimation: any = null;
-  private totalRevenueAnimation: any = null;
+  private darkModeSubscription: Subscription | null = null;
   
   // 활성 사용자 누적치 추적
   private activeUsersSum = 0;
@@ -56,64 +64,20 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   error: string | null = null;
 
   // 시간 단위 선택 옵션
-  timeUnitOptions = [
-    { value: 'second', label: '초단위', interval: 1000 },
-    { value: 'minute', label: '분단위', interval: 60000 },
-    { value: 'hour', label: '시단위', interval: 3600000 }
-  ];
+  timeUnitOptions = TIME_UNIT_OPTIONS;
   selectedTimeUnit = 'second';
 
   // 실시간 트래픽 데이터
-  realtimeData = {
-    labels: [] as string[],
-    datasets: [
-      {
-        label: '실시간 트래픽',
-        data: [] as number[],
-        borderColor: '#FF4757',
-        backgroundColor: 'rgba(255, 71, 87, 0.1)',
-        tension: 0.4,
-        fill: true,
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        yAxisID: 'y'
-      },
-      {
-        label: '활성 사용자',
-        data: [] as number[],
-        borderColor: '#2ED573',
-        backgroundColor: 'rgba(46, 213, 115, 0.1)',
-        tension: 0.4,
-        fill: true,
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        yAxisID: 'y'
-      },
-      {
-        label: '실시간 매출',
-        data: [] as number[],
-        borderColor: '#3742FA',
-        backgroundColor: 'rgba(55, 66, 250, 0.1)',
-        tension: 0.4,
-        fill: true,
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        yAxisID: 'y1'
-      }
-    ]
+  realtimeData: RealtimeData = {
+    labels: [],
+    datasets: []
   };
-
-  constructor(
-    private authService: AuthService, 
-    private dashboardService: DashboardService,
-    private logoutService: LogoutService,
-    private router: Router
-  ) { }
 
   ngOnInit(): void {
     this.loadDashboardData();
     this.initializeRealtimeData();
-    this.loadDarkModeSetting(); // 다크모드 설정 로드
+    this.setupAnimationCallbacks();
+    this.setupDarkModeSubscription();
   }
 
   ngAfterViewInit(): void {
@@ -124,46 +88,46 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // 컴포넌트가 파괴될 때 구독 해제
-    if (this.realtimeSubscription) {
-      this.realtimeSubscription.unsubscribe();
-      this.realtimeSubscription = null;
-    }
-
-    // 진행 중인 애니메이션 정리
-    if (this.totalUsersAnimation) {
-      clearInterval(this.totalUsersAnimation);
-      this.totalUsersAnimation = null;
-    }
-    if (this.activeUsersAnimation) {
-      clearInterval(this.activeUsersAnimation);
-      this.activeUsersAnimation = null;
-    }
-    if (this.realtimeTrafficAnimation) {
-      clearInterval(this.realtimeTrafficAnimation);
-      this.realtimeTrafficAnimation = null;
-    }
-    if (this.totalRevenueAnimation) {
-      clearInterval(this.totalRevenueAnimation);
-      this.totalRevenueAnimation = null;
-    }
-
-    // 차트 제거
-    this.destroyChart();
-    this.saveDarkModeSetting(); // 다크모드 설정 저장
+    this.cleanup();
   }
 
+  // 초기화 메서드들
+  private setupAnimationCallbacks(): void {
+    this.animationService.registerCallback('realtimeTraffic', (value: number) => {
+      this.stats.realtimeTraffic = value;
+      this.cdr.detectChanges();
+    });
+    
+    this.animationService.registerCallback('activeUsers', (value: number) => {
+      this.stats.activeUsers = value;
+      this.cdr.detectChanges();
+    });
+    
+    this.animationService.registerCallback('totalUsers', (value: number) => {
+      this.stats.totalUsers = value;
+      this.cdr.detectChanges();
+    });
+    
+    this.animationService.registerCallback('totalRevenue', (value: number) => {
+      this.stats.totalRevenue = value;
+      this.cdr.detectChanges();
+    });
+  }
 
+  private setupDarkModeSubscription(): void {
+    this.darkModeSubscription = this.darkModeService.isDarkMode$.subscribe(isDarkMode => {
+      if (this.chartService.getChart()) {
+        this.chartService.updateDarkMode(isDarkMode);
+      }
+    });
+  }
 
   // 시간 단위 변경
   onTimeUnitChange(): void {
     console.log('시간 단위 변경:', this.selectedTimeUnit);
     
     // 기존 구독 해제
-    if (this.realtimeSubscription) {
-      this.realtimeSubscription.unsubscribe();
-      this.realtimeSubscription = null;
-    }
+    this.stopRealtimeUpdates();
     
     // 새로운 시간 단위로 데이터 초기화
     this.initializeRealtimeData();
@@ -174,316 +138,120 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     }, 100);
   }
 
-  // 선택된 시간 단위의 간격 가져오기
-  getSelectedInterval(): number {
-    const option = this.timeUnitOptions.find(opt => opt.value === this.selectedTimeUnit);
-    return option ? option.interval : 1000;
-  }
-
-  // 시간 형식 가져오기
-  getTimeFormat(): any {
-    switch (this.selectedTimeUnit) {
-      case 'second':
-        return { 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          second: '2-digit',
-          hour12: false
-        };
-      case 'minute':
-        return { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: false
-        };
-      case 'hour':
-        return { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: false
-        };
-      default:
-        return { 
-          hour: '2-digit', 
-          minute: '2-digit', 
-          second: '2-digit',
-          hour12: false
-        };
-    }
-  }
-
   // 실시간 데이터 초기화
-  initializeRealtimeData(): void {
-    const now = new Date();
-    const labels: string[] = [];
-    const trafficData: number[] = [];
-    const activeData: number[] = [];
-    const revenueData: number[] = []; // 실시간 매출 데이터
-    const interval = this.getSelectedInterval();
-    const timeFormat = this.getTimeFormat();
-
-    // 시간 단위에 따라 데이터 포인트 수 조정 (항상 60개 표시)
-    let dataPoints = 60;
-    if (this.selectedTimeUnit === 'minute') {
-      dataPoints = 60; // 60분
-    } else if (this.selectedTimeUnit === 'hour') {
-      dataPoints = 60; // 60시간
-    }
-
-    // 데이터 포인트 생성
-    for (let i = dataPoints - 1; i >= 0; i--) {
-      const time = new Date(now.getTime() - i * interval);
-      labels.push(time.toLocaleTimeString('ko-KR', timeFormat));
-      
-      // 랜덤 트래픽 데이터 생성 (현실적인 패턴)
-      const baseTraffic = 40 + Math.random() * 40;
-      const noise = (Math.random() - 0.5) * 10;
-      trafficData.push(Math.max(0, Math.round(baseTraffic + noise)));
-      
-      // 활성 사용자 데이터 (트래픽의 60-80%)
-      const activeRatio = 0.6 + Math.random() * 0.2;
-      activeData.push(Math.round(trafficData[trafficData.length - 1] * activeRatio));
-
-      // 실시간 매출 데이터 (트래픽의 50-70%)
-      const baseRevenue = 10000 + Math.random() * 20000; // 1만원 ~ 3만원
-      const revenueNoise = (Math.random() - 0.5) * 5000;
-      revenueData.push(Math.max(0, Math.round(baseRevenue + revenueNoise)));
-    }
-
-    this.realtimeData.labels = labels;
-    this.realtimeData.datasets[0].data = trafficData;
-    this.realtimeData.datasets[1].data = activeData;
-    this.realtimeData.datasets[2].data = revenueData; // 실시간 매출 데이터 추가
-
+  private initializeRealtimeData(): void {
+    this.realtimeData = this.dataGenerationService.initializeRealtimeData(this.selectedTimeUnit);
+    
     // 초기 통계 값 설정
     if (this.stats.realtimeTraffic === 0) {
-      // 실시간 트래픽: 가장 최근 값
-      this.stats.realtimeTraffic = trafficData[trafficData.length - 1];
+      const lastIndex = this.realtimeData.datasets[0].data.length - 1;
       
-      // 활성 사용자: 가장 최근 값
-      this.stats.activeUsers = activeData[activeData.length - 1];
+      this.stats.realtimeTraffic = this.realtimeData.datasets[0].data[lastIndex];
+      this.stats.activeUsers = this.realtimeData.datasets[1].data[lastIndex];
       
       // 활성 사용자 누적치 초기화
-      this.activeUsersSum = activeData.reduce((sum, value) => sum + value, 0);
-      
-      // 총 사용자: 활성 사용자 누적치
+      this.activeUsersSum = this.realtimeData.datasets[1].data.reduce((sum, value) => sum + value, 0);
       this.stats.totalUsers = this.activeUsersSum;
       
-      // 총매출 초기화 (실시간 매출 데이터 기반)
-      this.stats.totalRevenue = revenueData.reduce((sum, value) => sum + value, 0);
+      // 총매출 초기화
+      this.stats.totalRevenue = this.realtimeData.datasets[2].data.reduce((sum, value) => sum + value, 0);
       
       // 성장률 계산
-      if (this.stats.totalUsers > 0) {
-        this.stats.growthRate = Math.round((this.stats.activeUsers / this.stats.totalUsers) * 100);
-      }
+      this.stats.growthRate = this.dataGenerationService.calculateGrowthRate(
+        this.stats.activeUsers, 
+        this.stats.totalUsers
+      );
     }
   }
 
   // 실시간 업데이트 시작
   startRealtimeUpdates(): void {
-    if (this.realtimeSubscription) {
-      this.realtimeSubscription.unsubscribe();
-    }
+    this.stopRealtimeUpdates();
     
-    const updateInterval = Math.max(this.getSelectedInterval(), 2000); // 최소 2초 간격
+    const updateInterval = Math.max(
+      this.dataGenerationService.getSelectedInterval(this.selectedTimeUnit), 
+      DATA_GENERATION_CONFIG.MIN_UPDATE_INTERVAL
+    );
+    
     this.realtimeSubscription = interval(updateInterval).subscribe(() => {
       this.updateRealtimeData();
     });
   }
 
+  // 실시간 업데이트 중지
+  private stopRealtimeUpdates(): void {
+    if (this.realtimeSubscription) {
+      this.realtimeSubscription.unsubscribe();
+      this.realtimeSubscription = null;
+    }
+  }
+
   // 실시간 데이터 업데이트
-  updateRealtimeData(): void {
-    if (!this.chart || !this.chart.data) {
+  private updateRealtimeData(): void {
+    if (!this.chartService.getChart()) {
       console.warn('차트가 준비되지 않았습니다.');
       return;
     }
 
-    const now = new Date();
-    const timeFormat = this.getTimeFormat();
-    const timeLabel = now.toLocaleTimeString('ko-KR', timeFormat);
+    const timeFormat = this.dataGenerationService.getTimeFormat(this.selectedTimeUnit);
+    const timeLabel = new Date().toLocaleTimeString('ko-KR', timeFormat);
+    const newDataPoint = this.dataGenerationService.generateRealtimeDataPoint();
 
-    // 새로운 데이터 포인트 생성 (50을 넘는 활성 사용자 데이터 포함)
-    const baseTraffic = 40 + Math.random() * 40; // 40-80 범위로 증가
-    const noise = (Math.random() - 0.5) * 10;
-    const newTraffic = Math.max(0, Math.round(baseTraffic + noise));
-    const activeRatio = 0.7 + Math.random() * 0.3; // 70-100% 범위로 증가
-    const newActive = Math.round(newTraffic * activeRatio);
-
-    // 데이터 배열 업데이트 (가장 오래된 데이터 제거, 새로운 데이터 추가)
+    // 데이터 배열 업데이트 (FIFO)
     this.realtimeData.labels.shift();
     this.realtimeData.labels.push(timeLabel);
     
     this.realtimeData.datasets[0].data.shift();
-    this.realtimeData.datasets[0].data.push(newTraffic);
+    this.realtimeData.datasets[0].data.push(newDataPoint.traffic);
     
     this.realtimeData.datasets[1].data.shift();
-    this.realtimeData.datasets[1].data.push(newActive);
+    this.realtimeData.datasets[1].data.push(newDataPoint.activeUsers);
 
-    // 실시간 매출 데이터 업데이트
-    const baseRevenue = 10000 + Math.random() * 20000; // 1만원 ~ 3만원
-    const revenueNoise = (Math.random() - 0.5) * 5000;
-    const newRevenue = Math.max(0, Math.round(baseRevenue + revenueNoise));
     this.realtimeData.datasets[2].data.shift();
-    this.realtimeData.datasets[2].data.push(newRevenue);
+    this.realtimeData.datasets[2].data.push(newDataPoint.revenue);
 
-    // 실시간 트래픽 값 업데이트 (현재 트래픽 값)
-    this.animateNumber('realtimeTraffic', this.stats.realtimeTraffic, newTraffic);
-
-    // 활성 사용자 값 업데이트 (현재 활성 사용자 값)
-    this.animateNumber('activeUsers', this.stats.activeUsers, newActive);
+    // 통계 값 애니메이션 업데이트
+    this.animationService.animateNumber('realtimeTraffic', this.stats.realtimeTraffic, newDataPoint.traffic);
+    this.animationService.animateNumber('activeUsers', this.stats.activeUsers, newDataPoint.activeUsers);
 
     // 활성 사용자 누적치 업데이트
-    this.activeUsersSum += newActive;
-    
-    // 총 사용자 값 업데이트 (활성 사용자 누적치)
-    this.animateNumber('totalUsers', this.stats.totalUsers, this.activeUsersSum);
+    this.activeUsersSum += newDataPoint.activeUsers;
+    this.animationService.animateNumber('totalUsers', this.stats.totalUsers, this.activeUsersSum);
 
-    // 총매출 계산 (실시간 트래픽 기반)
-    const revenuePerTraffic = 50000; // 트래픽당 5만원
-    const newRevenueTotal = newTraffic * revenuePerTraffic;
+    // 총매출 계산 및 애니메이션
+    const newRevenueTotal = this.dataGenerationService.calculateRevenueFromTraffic(newDataPoint.traffic);
     this.stats.totalRevenue += newRevenueTotal;
+    this.animationService.animateNumber('totalRevenue', this.stats.totalRevenue - newRevenueTotal, this.stats.totalRevenue);
+
+    // 성장률 업데이트
+    this.stats.growthRate = this.dataGenerationService.calculateGrowthRate(
+      this.stats.activeUsers, 
+      this.stats.totalUsers
+    );
+
+    // 차트 업데이트
+    this.chartService.updateChart(this.realtimeData);
     
-    // 총매출 애니메이션 (누적 방식)
-    this.animateNumber('totalRevenue', this.stats.totalRevenue - newRevenueTotal, this.stats.totalRevenue);
-
-    // 활성 사용자 비율 업데이트
-    if (this.stats.totalUsers > 0) {
-      this.stats.growthRate = Math.round((this.stats.activeUsers / this.stats.totalUsers) * 100);
-    }
-
-    try {
-      // 차트 업데이트
-      this.chart.data.labels = this.realtimeData.labels;
-      this.chart.data.datasets[0].data = this.realtimeData.datasets[0].data;
-      this.chart.data.datasets[1].data = this.realtimeData.datasets[1].data;
-      this.chart.data.datasets[2].data = this.realtimeData.datasets[2].data; // 실시간 매출 데이터 업데이트
-      
-      this.chart.update('none'); // 애니메이션 없이 업데이트
-    } catch (error) {
-      console.error('차트 업데이트 중 오류:', error);
-    }
-  }
-
-
-
-  // 숫자 애니메이션 (룰렛 효과)
-  animateNumber(statType: 'totalUsers' | 'activeUsers' | 'realtimeTraffic' | 'totalRevenue', startValue: number, endValue: number): void {
-    // 이미 진행 중인 애니메이션이 있으면 중단
-    if (statType === 'totalUsers' && this.totalUsersAnimation) {
-      clearInterval(this.totalUsersAnimation);
-      this.totalUsersAnimation = null;
-    }
-    if (statType === 'activeUsers' && this.activeUsersAnimation) {
-      clearInterval(this.activeUsersAnimation);
-      this.activeUsersAnimation = null;
-    }
-    if (statType === 'realtimeTraffic' && this.realtimeTrafficAnimation) {
-      clearInterval(this.realtimeTrafficAnimation);
-      this.realtimeTrafficAnimation = null;
-    }
-    if (statType === 'totalRevenue' && this.totalRevenueAnimation) {
-      clearInterval(this.totalRevenueAnimation);
-      this.totalRevenueAnimation = null;
-    }
-
-    // 증가량이 너무 작으면 애니메이션 생략
-    const difference = endValue - startValue;
-    if (Math.abs(difference) < 1) {
-      return;
-    }
-
-    const duration = 1500; // 1.5초로 조정
-    const steps = 20; // 단계 수 조정
-    const stepDuration = duration / steps;
-    const increment = difference / steps;
-    
-    let currentStep = 0;
-    let currentValue = startValue;
-
-    // 애니메이션 시작 시 CSS 클래스 추가
-    let element: HTMLElement | null = null;
-    
-    switch (statType) {
-      case 'realtimeTraffic':
-        element = document.querySelector('.stat-card:nth-child(1) .stat-number') as HTMLElement;
-        break;
-      case 'activeUsers':
-        element = document.querySelector('.stat-card:nth-child(2) .stat-number') as HTMLElement;
-        break;
-      case 'totalUsers':
-        element = document.querySelector('.stat-card:nth-child(3) .stat-number') as HTMLElement;
-        break;
-      case 'totalRevenue':
-        element = document.querySelector('.stat-card:nth-child(4) .stat-number') as HTMLElement;
-        break;
-    }
-    
-    if (element) {
-      element.classList.add('rolling');
-      setTimeout(() => {
-        if (element) {
-          element.classList.remove('rolling');
-        }
-      }, 800);
-    }
-
-    const animation = setInterval(() => {
-      currentStep++;
-      currentValue += increment;
-
-      // 마지막 단계에서는 정확한 목표 값으로 설정
-      if (currentStep >= steps) {
-        currentValue = endValue;
-        clearInterval(animation);
-        
-        // 애니메이션 완료 시 추적 변수 초기화
-        if (statType === 'totalUsers') {
-          this.totalUsersAnimation = null;
-        } else if (statType === 'activeUsers') {
-          this.activeUsersAnimation = null;
-        } else if (statType === 'realtimeTraffic') {
-          this.realtimeTrafficAnimation = null;
-        } else if (statType === 'totalRevenue') {
-          this.totalRevenueAnimation = null;
-        }
-      }
-
-      // 통계 값 업데이트
-      if (statType === 'totalUsers') {
-        this.stats.totalUsers = Math.round(currentValue);
-        this.totalUsersAnimation = animation;
-      } else if (statType === 'activeUsers') {
-        this.stats.activeUsers = Math.round(currentValue);
-        this.activeUsersAnimation = animation;
-      } else if (statType === 'realtimeTraffic') {
-        this.stats.realtimeTraffic = Math.round(currentValue);
-        this.realtimeTrafficAnimation = animation;
-      } else if (statType === 'totalRevenue') {
-        this.stats.totalRevenue = Math.round(currentValue);
-        this.totalRevenueAnimation = animation;
-      }
-
-      // 성장률도 함께 업데이트 (활성 사용자 비율)
-      if (this.stats.totalUsers > 0) {
-        this.stats.growthRate = Math.round((this.stats.activeUsers / this.stats.totalUsers) * 100);
-      }
-
-    }, stepDuration);
+    // 변경 감지 트리거
+    this.cdr.detectChanges();
   }
 
   // 대시보드 데이터 로드
-  loadDashboardData(): void {
+  public loadDashboardData(): void {
     this.loading = true;
+    this.cdr.detectChanges();
     
     // 통계 데이터 로드
     this.dashboardService.getUserStats().subscribe({
       next: (stats: DashboardStats) => {
         this.stats = stats;
         this.loading = false;
+        this.cdr.detectChanges();
       },
       error: (error: any) => {
         console.error('통계 데이터 로드 실패:', error);
         this.loading = false;
+        this.cdr.detectChanges();
       }
     });
 
@@ -491,28 +259,17 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     this.dashboardService.getRecentActivities().subscribe({
       next: (activities: Activity[]) => {
         this.recentActivities = activities;
+        this.cdr.detectChanges();
       },
       error: (error: any) => {
         console.error('활동 데이터 로드 실패:', error);
+        this.cdr.detectChanges();
       }
     });
   }
 
-  // 차트 제거 메서드
-  destroyChart(): void {
-    if (this.chart) {
-      try {
-        this.chart.destroy();
-        console.log('기존 차트 제거 완료');
-      } catch (error) {
-        console.error('차트 제거 중 오류:', error);
-      }
-      this.chart = null;
-    }
-  }
-
   // 차트 초기화
-  initChart(): void {
+  private initChart(): void {
     console.log('차트 초기화 시작...');
     
     if (!this.chartCanvas || !this.chartCanvas.nativeElement) {
@@ -520,168 +277,13 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       return;
     }
 
-    // 기존 차트 제거
-    this.destroyChart();
-
-    const ctx = this.chartCanvas.nativeElement.getContext('2d');
-    if (!ctx) {
-      console.error('차트 컨텍스트를 가져올 수 없습니다.');
-      return;
-    }
-
-    console.log('실시간 데이터:', this.realtimeData);
-
-    // 다크모드에 따른 색상 설정
-    const isDark = this.isDarkMode;
-    const textColor = isDark ? '#ffffff' : '#2c3e50';
-    const gridColor = isDark ? '#404040' : '#e9ecef';
-    const backgroundColor = isDark ? '#404040' : '#f8f9fa';
-
     try {
-      this.chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: this.realtimeData.labels,
-          datasets: [
-            {
-              label: '실시간 트래픽',
-              data: this.realtimeData.datasets[0].data,
-              borderColor: '#FF4757',
-              backgroundColor: isDark ? 'rgba(255, 71, 87, 0.2)' : 'rgba(255, 71, 87, 0.1)',
-              tension: 0.4,
-              fill: true,
-              pointRadius: 2,
-              pointHoverRadius: 4,
-              yAxisID: 'y'
-            },
-            {
-              label: '활성 사용자',
-              data: this.realtimeData.datasets[1].data,
-              borderColor: '#2ED573',
-              backgroundColor: isDark ? 'rgba(46, 213, 115, 0.2)' : 'rgba(46, 213, 115, 0.1)',
-              tension: 0.4,
-              fill: true,
-              pointRadius: 2,
-              pointHoverRadius: 4,
-              yAxisID: 'y'
-            },
-            {
-              label: '실시간 매출',
-              data: this.realtimeData.datasets[2].data,
-              borderColor: '#3742FA',
-              backgroundColor: isDark ? 'rgba(55, 66, 250, 0.2)' : 'rgba(55, 66, 250, 0.1)',
-              tension: 0.4,
-              fill: true,
-              pointRadius: 2,
-              pointHoverRadius: 4,
-              yAxisID: 'y1'
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: {
-            duration: 300
-          },
-          interaction: {
-            mode: 'index' as const,
-            intersect: false,
-          },
-          plugins: {
-            title: {
-              display: true,
-              text: '실시간 트래픽 & 매출 모니터링',
-              font: {
-                size: 16,
-                weight: 'bold'
-              },
-              color: textColor
-            },
-            legend: {
-              position: 'top' as const,
-              labels: {
-                usePointStyle: true,
-                padding: 15,
-                color: textColor
-              }
-            },
-            tooltip: {
-              mode: 'index',
-              intersect: false,
-              backgroundColor: isDark ? 'rgba(45, 45, 45, 0.9)' : 'rgba(0, 0, 0, 0.8)',
-              titleColor: isDark ? '#ffffff' : '#fff',
-              bodyColor: isDark ? '#ffffff' : '#fff',
-              borderColor: isDark ? '#404040' : '#fff',
-              borderWidth: 1
-            }
-          },
-          scales: {
-            x: {
-              type: 'category',
-              display: true,
-              title: {
-                display: true,
-                text: '시간',
-                color: textColor
-              },
-              grid: {
-                color: gridColor
-              },
-              ticks: {
-                maxTicksLimit: 12, // 최대 12개의 틱만 표시
-                maxRotation: 45, // 라벨 회전
-                minRotation: 0,
-                autoSkip: true,
-                autoSkipPadding: 10,
-                color: textColor
-              }
-            },
-            y: {
-              type: 'linear',
-              display: true,
-              title: {
-                display: true,
-                text: '트래픽 수',
-                color: textColor
-              },
-              beginAtZero: true,
-              grid: {
-                color: gridColor
-              },
-              ticks: {
-                color: textColor
-              }
-            },
-            y1: { // 새로운 축 추가
-              type: 'linear',
-              display: true,
-              position: 'right',
-              title: {
-                display: true,
-                text: '매출 (원)',
-                color: textColor
-              },
-              beginAtZero: true,
-              grid: {
-                color: gridColor
-              },
-              ticks: {
-                color: textColor
-              }
-            }
-          },
-          elements: {
-            point: {
-              hoverRadius: 6,
-              radius: 2
-            },
-            line: {
-              borderWidth: 2
-            }
-          }
-        }
-      });
+      this.chartService.initChart(
+        this.chartCanvas.nativeElement, 
+        this.realtimeData, 
+        this.darkModeService.isDarkMode
+      );
+      
       console.log('차트 생성 완료');
       
       // 차트 생성 후 실시간 업데이트 시작
@@ -691,30 +293,30 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       
     } catch (error) {
       console.error('차트 생성 중 오류:', error);
-      this.chart = null;
     }
   }
 
-
-
-  // 로그아웃
-  logout(): void {
-    // 간단한 확인 메시지
-    if (confirm('로그아웃하시겠습니까?')) {
-      this.logoutService.logout();
+  // 리소스 정리
+  private cleanup(): void {
+    this.stopRealtimeUpdates();
+    
+    if (this.darkModeSubscription) {
+      this.darkModeSubscription.unsubscribe();
+      this.darkModeSubscription = null;
     }
+
+    this.animationService.destroy();
+    this.chartService.destroyChart();
   }
 
-  // 현재 사용자 정보 가져오기
-  getCurrentUser() {
-    return this.authService.getCurrentUser();
+  // UI 이벤트 핸들러들
+  toggleDarkMode(): void {
+    this.darkModeService.toggleDarkMode();
   }
 
-  // 실시간 업데이트 일시정지/재개
   toggleRealtimeUpdates(): void {
     if (this.realtimeSubscription) {
-      this.realtimeSubscription.unsubscribe();
-      this.realtimeSubscription = null;
+      this.stopRealtimeUpdates();
       console.log('실시간 업데이트 일시정지');
     } else {
       this.startRealtimeUpdates();
@@ -722,12 +324,21 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  // 활동 추적 함수
+  logout(): void {
+    if (confirm('로그아웃하시겠습니까?')) {
+      this.logoutService.logout();
+    }
+  }
+
+  getCurrentUser() {
+    return this.authService.getCurrentUser();
+  }
+
+  // 활동 관련 메서드들
   trackByActivity(index: number, activity: Activity): number {
     return activity.id;
   }
 
-  // 활동 아이콘 가져오기
   getActivityIcon(action: string): string {
     switch (action.toLowerCase()) {
       case 'login':
@@ -745,59 +356,58 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
-  // 모든 활동 보기
+  onActivityClick(activity: Activity): void {
+    console.log('활동 클릭:', activity);
+    
+    const message = `
+활동 상세 정보:
+- 사용자: ${activity.user}
+- 활동: ${activity.action}
+- 시간: ${activity.time}
+- ID: ${activity.id}
+    `.trim();
+    
+    alert(message);
+  }
+
+  // 퀵 액션 메서드들
   viewAllActivities(): void {
     console.log('모든 활동 보기 클릭됨');
     alert('모든 활동 페이지로 이동합니다. (실제 구현에서는 라우팅 처리)');
-    // 실제 구현에서는 라우터를 통해 활동 목록 페이지로 이동
-    // this.router.navigate(['/activities']);
   }
 
-  // 새 사용자 추가
   addNewUser(): void {
     console.log('새 사용자 추가 클릭됨');
     alert('새 사용자 추가 모달을 엽니다. (실제 구현에서는 모달 또는 페이지 이동)');
-    // 실제 구현에서는 모달 열기 또는 사용자 추가 페이지로 이동
-    // this.openUserModal();
   }
 
-  // 보고서 생성
   generateReport(): void {
     console.log('보고서 생성 클릭됨');
     alert('보고서 생성 중... (실제 구현에서는 API 호출)');
     
-    // 로딩 상태 표시
     this.loading = true;
     
-    // 시뮬레이션된 보고서 생성
     setTimeout(() => {
       this.loading = false;
       alert('보고서가 성공적으로 생성되었습니다!');
-      
-      // 실제 구현에서는 파일 다운로드 또는 새 창에서 보고서 표시
-      // this.downloadReport();
     }, 2000);
   }
 
-  // 알림 설정
   openNotificationSettings(): void {
     console.log('알림 설정 클릭됨');
     alert('알림 설정 페이지로 이동합니다. (실제 구현에서는 라우팅 처리)');
-    // 실제 구현에서는 알림 설정 페이지로 이동
-    // this.router.navigate(['/notifications']);
   }
 
-  // 분석 보기
   viewAnalytics(): void {
     console.log('분석 보기 클릭됨');
     alert('상세 분석 페이지로 이동합니다. (실제 구현에서는 라우팅 처리)');
-    // 실제 구현에서는 분석 페이지로 이동
-    // this.router.navigate(['/analytics']);
   }
 
+  // 유틸리티 메서드들
+  getSelectedInterval(): number {
+    return this.dataGenerationService.getSelectedInterval(this.selectedTimeUnit);
+  }
 
-
-  // 통계 카드 툴팁 정보 가져오기
   getStatTooltip(statType: string): string {
     switch (statType) {
       case 'realtimeTraffic':
@@ -818,103 +428,5 @@ export class DashboardComponent implements OnInit, AfterViewInit, OnDestroy {
       default:
         return '통계 정보를 확인할 수 없습니다.';
     }
-  }
-
-  // 활동 항목 클릭 시 상세 정보 표시
-  onActivityClick(activity: Activity): void {
-    console.log('활동 클릭:', activity);
-    
-    const message = `
-활동 상세 정보:
-- 사용자: ${activity.user}
-- 활동: ${activity.action}
-- 시간: ${activity.time}
-- ID: ${activity.id}
-    `.trim();
-    
-    alert(message);
-    
-    // 실제 구현에서는 활동 상세 모달이나 페이지로 이동
-    // this.openActivityDetailModal(activity);
-  }
-
-  // 다크모드 토글
-  toggleDarkMode(): void {
-    this.isDarkMode = !this.isDarkMode;
-    this.saveDarkModeSetting();
-    this.applyDarkMode();
-    
-    // 차트가 존재하면 다크모드에 맞게 업데이트
-    if (this.chart) {
-      this.updateChartForDarkMode();
-    }
-  }
-
-  // 다크모드 설정 로드
-  loadDarkModeSetting(): void {
-    const savedMode = localStorage.getItem('isDarkMode');
-    if (savedMode === 'true') {
-      this.isDarkMode = true;
-    } else {
-      this.isDarkMode = false;
-    }
-    this.applyDarkMode();
-  }
-
-  // 다크모드 설정 저장
-  saveDarkModeSetting(): void {
-    localStorage.setItem('isDarkMode', this.isDarkMode.toString());
-  }
-
-  // 다크모드 적용
-  applyDarkMode(): void {
-    if (this.isDarkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-  }
-
-  // 차트 다크모드 업데이트
-  updateChartForDarkMode(): void {
-    if (!this.chart) return;
-
-    const isDark = this.isDarkMode;
-    const textColor = isDark ? '#ffffff' : '#2c3e50';
-    const gridColor = isDark ? '#404040' : '#e9ecef';
-
-    // 차트 옵션 업데이트
-    this.chart.options.plugins!.title!.color = textColor;
-    this.chart.options.plugins!.legend!.labels!.color = textColor;
-    
-    // 툴팁 색상 업데이트
-    this.chart.options.plugins!.tooltip!.backgroundColor = isDark ? 'rgba(45, 45, 45, 0.9)' : 'rgba(0, 0, 0, 0.8)';
-    this.chart.options.plugins!.tooltip!.borderColor = isDark ? '#404040' : '#fff';
-
-    // 축 색상 업데이트
-    if (this.chart.options.scales) {
-      const scales = this.chart.options.scales as any;
-      
-      if (scales.x) {
-        scales.x.title.color = textColor;
-        scales.x.grid.color = gridColor;
-        scales.x.ticks.color = textColor;
-      }
-      
-      if (scales.y) {
-        scales.y.title.color = textColor;
-        scales.y.grid.color = gridColor;
-        scales.y.ticks.color = textColor;
-      }
-      
-      if (scales.y1) {
-        scales.y1.title.color = textColor;
-        scales.y1.grid.color = gridColor;
-        scales.y1.ticks.color = textColor;
-      }
-    }
-
-    // 차트 업데이트
-    this.chart.update('none');
   }
 }
